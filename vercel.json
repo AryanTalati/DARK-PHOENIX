@@ -1,5 +1,4 @@
 {
   "framework": "nextjs",
-  "rootDirectory": "ai-podcast-clipper-frontend",
   "installCommand": "npm install --legacy-peer-deps"
 }
