@@ -1,0 +1,6 @@
+{
+  "buildCommand": "cd ai-podcast-clipper-frontend && npm install --legacy-peer-deps && npm run build",
+  "outputDirectory": "ai-podcast-clipper-frontend/.next",
+  "installCommand": "cd ai-podcast-clipper-frontend && npm install --legacy-peer-deps",
+  "framework": "nextjs"
+}
