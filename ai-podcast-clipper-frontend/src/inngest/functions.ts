@@ -11,9 +11,9 @@ export const processVideo = inngest.createFunction(
       limit: 1,
       key: "event.data.userId",
     },
+    triggers: [{ event: "process-video-events" }],
   },
-  { event: "process-video-events" },
-  async ({ event, step }) => {
+  async ({ event, step }: any) => {
     const { uploadedFileId } = event.data as {
       uploadedFileId: string;
       userId: string;
@@ -49,12 +49,8 @@ export const processVideo = inngest.createFunction(
       if (credits > 0) {
         await step.run("set-status-processing", async () => {
           await db.uploadedFile.update({
-            where: {
-              id: uploadedFileId,
-            },
-            data: {
-              status: "processing",
-            },
+            where: { id: uploadedFileId },
+            data: { status: "processing" },
           });
         });
 
@@ -71,9 +67,7 @@ export const processVideo = inngest.createFunction(
           "create-clips-in-db",
           async () => {
             const folderPrefix = s3Key.split("/")[0]!;
-
             const allKeys = await listS3ObjectsByPrefix(folderPrefix);
-
             const clipKeys = allKeys.filter(
               (key): key is string =>
                 key !== undefined && !key.endsWith("original.mp4"),
@@ -95,47 +89,31 @@ export const processVideo = inngest.createFunction(
 
         await step.run("deduct-credits", async () => {
           await db.user.update({
-            where: {
-              id: userId,
-            },
+            where: { id: userId },
             data: {
-              credits: {
-                decrement: Math.min(credits, clipsFound),
-              },
+              credits: { decrement: Math.min(credits, clipsFound) },
             },
           });
         });
 
         await step.run("set-status-processed", async () => {
           await db.uploadedFile.update({
-            where: {
-              id: uploadedFileId,
-            },
-            data: {
-              status: "processed",
-            },
+            where: { id: uploadedFileId },
+            data: { status: "processed" },
           });
         });
       } else {
         await step.run("set-status-no-credits", async () => {
           await db.uploadedFile.update({
-            where: {
-              id: uploadedFileId,
-            },
-            data: {
-              status: "no credits",
-            },
+            where: { id: uploadedFileId },
+            data: { status: "no credits" },
           });
         });
       }
     } catch (error: unknown) {
       await db.uploadedFile.update({
-        where: {
-          id: uploadedFileId,
-        },
-        data: {
-          status: "failed",
-        },
+        where: { id: uploadedFileId },
+        data: { status: "failed" },
       });
     }
   },
