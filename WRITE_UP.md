@@ -85,3 +85,10 @@ frontend and business logic, Modal for GPU-based AI processing, Supabase
 for data storage, S3 for file storage, and Inngest for job queuing. All 
 services communicate through environment variables and API keys as 
 designed in the original codebase.
+
+2. **Add YouTube URL input to dashboard** — Currently the dashboard only 
+   supports direct MP4 file uploads. YouTube URL ingestion requires running 
+   the `process-youtube.mjs` script manually from the terminal. A future 
+   improvement would be adding a YouTube URL input field directly in the 
+   dashboard UI that triggers the download and processing pipeline 
+   automatically without needing to run any scripts.
