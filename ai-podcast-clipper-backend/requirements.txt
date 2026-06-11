@@ -8,7 +8,7 @@ ffmpegcv
 numpy<2.0
 python_speech_features
 scipy
-scenedetect
+scenedetect==0.5.6
 scikit-learn
 gdown
 pandas
@@ -19,5 +19,5 @@ google-genai
 pysubs2
 boto3
 fastapi[standard]
-whisperx @ git+https://github.com/m-bain/whisperx.git@v3.2.0
+git+https://github.com/m-bain/whisperx.git@v3.2.0
 pyannote-audio==3.1.1

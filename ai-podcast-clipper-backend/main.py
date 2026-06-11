@@ -29,6 +29,10 @@ class ProcessVideoRequest(BaseModel):
 image = (modal.Image.from_registry(
     "nvidia/cuda:12.4.0-devel-ubuntu22.04", add_python="3.11")
     .apt_install(["ffmpeg", "libgl1-mesa-glx", "wget", "libcudnn8", "libcudnn8-dev", "pkg-config", "libavformat-dev", "libavcodec-dev", "libavdevice-dev", "libavutil-dev", "libswscale-dev", "libswresample-dev", "libavfilter-dev", "clang", "build-essential", "gcc", "git"])
+    .run_commands([
+    "pip install 'setuptools==69.5.1' wheel Cython",
+    "pip install git+https://github.com/m-bain/whisperx.git@v3.2.0 --no-build-isolation"
+])
     .pip_install_from_requirements("requirements.txt")
     .run_commands([
         "mkdir -p /usr/share/fonts/truetype/custom",
@@ -230,8 +234,10 @@ def create_subtitles_with_ffmpeg(transcript_segments: list, clip_start: float, c
 
     subs.save(subtitle_path)
 
-    ffmpeg_cmd = (f"ffmpeg -y -i {clip_video_path} -vf \"ass={subtitle_path}\" "
-                  f"-c:v h264 -preset fast -crf 23 {output_path}")
+    ffmpeg_cmd = (f"ffmpeg -y -i {clip_video_path} -vf \"ass={subtitle_path},"
+              f"drawtext=text=LUNARTECH:fontsize=40:fontcolor=white:alpha=0.8:"
+              f"x=w-tw-20:y=20:fontfile=/usr/share/fonts/truetype/custom/Anton-Regular.ttf\" "
+              f"-c:v h264 -preset fast -crf 23 {output_path}")
 
     subprocess.run(ffmpeg_cmd, shell=True, check=True)
 
@@ -258,10 +264,10 @@ def process_clip(base_dir: str, original_video_path: str, s3_key: str, start_tim
     pyavi_path.mkdir(exist_ok=True)
 
     duration = end_time - start_time
-    cut_command = (f"ffmpeg -i {original_video_path} -ss {start_time} -t {duration} "
-                   f"{clip_segment_path}")
-    subprocess.run(cut_command, shell=True, check=True,
-                   capture_output=True, text=True)
+    
+    cut_command = (f"ffmpeg -ss {start_time} -i {original_video_path} -t {duration} "
+               f"-c:v libx264 -c:a aac {clip_segment_path}")
+    subprocess.run(cut_command, shell=True, check=True, text=True)
 
     extract_cmd = f"ffmpeg -i {clip_segment_path} -vn -acodec pcm_s16le -ar 16000 -ac 1 {audio_path}"
     subprocess.run(extract_cmd, shell=True,
@@ -282,7 +288,14 @@ def process_clip(base_dir: str, original_video_path: str, s3_key: str, start_tim
     tracks_path = clip_dir / "pywork" / "tracks.pckl"
     scores_path = clip_dir / "pywork" / "scores.pckl"
     if not tracks_path.exists() or not scores_path.exists():
-        raise FileNotFoundError("Tracks or scores not found for clip")
+     print(f"Columbia script failed for clip {clip_index}, using fallback")
+     fallback_path = str(base_dir / f"{clip_name}.mp4")
+     create_subtitles_with_ffmpeg(transcript_segments, start_time,
+                                end_time, fallback_path, subtitle_output_path, max_words=5)
+     s3_client = boto3.client("s3")
+     s3_client.upload_file(
+        str(subtitle_output_path), os.environ["S3_BUCKET_NAME"], output_s3_key)
+     return
 
     with open(tracks_path, "rb") as f:
         tracks = pickle.load(f)
@@ -366,7 +379,7 @@ class AiPodcastClipper:
         return json.dumps(segments)
 
     def identify_moments(self, transcript: dict):
-        response = self.gemini_client.models.generate_content(model="gemini-3-flash-preview", contents="""
+        response = self.gemini_client.models.generate_content(model="gemini-2.5-flash", contents="""
     This is a podcast video transcript consisting of word, along with each words's start and end time. I am looking to create clips between a minimum of 30 and maximum of 60 seconds long. The clip should never exceed 60 seconds.
 
     Your task is to find and extract stories, or question and their corresponding answers from the transcript.
@@ -379,6 +392,7 @@ class AiPodcastClipper:
     - Only use the start and end timestamps provided in the input. modifying timestamps is not allowed.
     - Format the output as a list of JSON objects, each representing a clip with 'start' and 'end' timestamps: [{"start": seconds, "end": seconds}, ...clip2, clip3]. The output should always be readable by the python json.loads function.
     - Aim to generate longer clips between 40-60 seconds, and ensure to include as much content from the context as viable.
+    - Generate a MAXIMUM of 5 clips total. Do not exceed 5 clips under any circumstances.                                                         
 
     Avoid including:
     - Moments of greeting, thanking, or saying goodbye.
